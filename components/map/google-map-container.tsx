@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react"
 import { MapControls } from "./map-controls"
 import { MapLegend } from "./map-legend"
 import { mockIncidents, mockSignals } from "@/lib/mock-data"
+import { subscribeToCameras, initializeSampleData } from "@/lib/firebase-service"
+import type { CameraData } from "@/lib/firebase-types"
+import { loadGoogleMapsAPI, getGoogleMapsConfig, isGoogleMapsAPILoaded } from "@/lib/google-maps-loader"
 
 declare global {
   interface Window {
@@ -18,35 +21,33 @@ export function GoogleMapContainer() {
   const markersRef = useRef<any[]>([])
   const [apiKeyLoaded, setApiKeyLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [cameras, setCameras] = useState<CameraData[]>([])
+  const [cameraMarkersRef] = useState<any[]>([])
 
   useEffect(() => {
     const loadGoogleMaps = async () => {
       try {
-        const response = await fetch("/api/maps-config")
-        if (!response.ok) {
-          throw new Error("Failed to fetch Google Maps configuration")
-        }
-
-        const { apiKey } = await response.json()
-
-        const script = document.createElement("script")
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=marker,clustering`
-        script.async = true
-        script.defer = true
-
-        script.onload = () => {
-          if (mapRef.current && window.google) {
-            setApiKeyLoaded(true)
+        // Check if already loaded
+        if (isGoogleMapsAPILoaded()) {
+          setApiKeyLoaded(true)
+          if (mapRef.current) {
             initializeMap()
           }
+          return
         }
 
-        script.onerror = () => {
-          setError("Failed to load Google Maps API. Check your API key and domain restrictions.")
-          setApiKeyLoaded(false)
-        }
+        // Get configuration and load API
+        const config = await getGoogleMapsConfig()
+        await loadGoogleMapsAPI({
+          ...config,
+          libraries: ['marker', 'geometry', 'places']
+        })
 
-        document.head.appendChild(script)
+        // API loaded successfully
+        if (mapRef.current && window.google) {
+          setApiKeyLoaded(true)
+          initializeMap()
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load Google Maps")
         setApiKeyLoaded(false)
@@ -54,6 +55,51 @@ export function GoogleMapContainer() {
     }
 
     loadGoogleMaps()
+  }, [])
+
+  // Subscribe to Firebase camera data
+  useEffect(() => {
+    if (!map) return
+
+    const unsubscribe = subscribeToCameras((camerasData) => {
+      setCameras(camerasData)
+      if (map && camerasData.length > 0) {
+        addCameraMarkers(map, camerasData)
+      }
+    })
+
+    // Initialize sample data if no cameras exist
+    const initData = async () => {
+      try {
+        await initializeSampleData()
+      } catch (err) {
+        console.log('Sample data already exists or failed to initialize:', err)
+      }
+    }
+    initData()
+
+    return () => {
+      unsubscribe()
+    }
+  }, [map])
+
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      // Clean up markers on unmount
+      markersRef.current.forEach((marker) => {
+        if (marker && marker.setMap) {
+          marker.setMap(null)
+        }
+      })
+      cameraMarkersRef.forEach((marker) => {
+        if (marker && marker.setMap) {
+          marker.setMap(null)
+        }
+      })
+      markersRef.current = []
+      cameraMarkersRef.length = 0
+    }
   }, [])
 
   const initializeMap = () => {
@@ -136,6 +182,9 @@ export function GoogleMapContainer() {
 
     setMap(mapInstance)
     addMarkers(mapInstance)
+    if (cameras.length > 0) {
+      addCameraMarkers(mapInstance, cameras)
+    }
   }
 
   const addMarkers = (mapInstance: any) => {
@@ -188,6 +237,80 @@ export function GoogleMapContainer() {
       })
 
       markersRef.current.push(marker)
+    })
+  }
+
+  const addCameraMarkers = (mapInstance: any, camerasData: CameraData[]) => {
+    // Clear existing camera markers
+    cameraMarkersRef.forEach((marker) => marker.setMap(null))
+    cameraMarkersRef.length = 0
+
+    // Add camera markers from Firebase
+    camerasData.forEach((camera) => {
+      // Determine marker color based on traffic and accident status
+      let color = "#22c55e" // Green for normal
+      let title = `Camera: ${camera.cameraNumber}`
+      
+      if (camera.accidentStatus.isAccident) {
+        color = "#ef4444" // Red for accidents
+        title += ` - ACCIDENT (${camera.accidentStatus.severity?.toUpperCase()})`
+      } else if (camera.trafficStatus.congestionLevel === "high") {
+        color = "#f97316" // Orange for high traffic
+        title += ` - High Traffic`
+      } else if (camera.trafficStatus.congestionLevel === "medium") {
+        color = "#eab308" // Yellow for medium traffic
+        title += ` - Medium Traffic`
+      }
+      
+      const marker = new window.google.maps.Marker({
+        position: {
+          lat: camera.coordinates.latitude,
+          lng: camera.coordinates.longitude
+        },
+        map: mapInstance,
+        title,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: color,
+          fillOpacity: 0.9,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+        },
+      })
+
+      // Add info window for camera details
+      const infoWindow = new window.google.maps.InfoWindow({
+        content: `
+          <div style="color: #333; font-family: system-ui;">
+            <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">
+              ${camera.name || camera.cameraNumber}
+            </h3>
+            <p style="margin: 0 0 4px 0; font-size: 12px; color: #666;">
+              ${camera.location || 'Location not specified'}
+            </p>
+            <div style="font-size: 11px; color: #888;">
+              <div>Traffic: ${camera.trafficStatus.congestionLevel} (${camera.trafficStatus.vehicleCount} vehicles)</div>
+              <div>Speed: ${camera.trafficStatus.averageSpeed} km/h</div>
+              ${camera.accidentStatus.isAccident ? 
+                `<div style="color: #ef4444; font-weight: 600;">⚠️ ACCIDENT DETECTED</div>` : 
+                '<div style="color: #22c55e;">✓ No incidents</div>'
+              }
+            </div>
+          </div>
+        `
+      })
+
+      marker.addListener("click", () => {
+        infoWindow.open(mapInstance, marker)
+        mapInstance.panTo({
+          lat: camera.coordinates.latitude,
+          lng: camera.coordinates.longitude
+        })
+        mapInstance.setZoom(16)
+      })
+
+      cameraMarkersRef.push(marker)
     })
   }
 
