@@ -10,7 +10,7 @@ export default function Home() {
     <DashboardLayout>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 h-full">
         {/* Main map area */}
-        <div className="lg:col-span-3 rounded-lg border border-glow-cyan overflow-hidden">
+        <div className="lg:col-span-3 rounded-lg border border-glow-cyan overflow-hidden h-full min-h-[600px]">
           <MapContainer />
         </div>
 

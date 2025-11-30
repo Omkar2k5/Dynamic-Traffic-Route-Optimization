@@ -32,13 +32,23 @@ export function RouteSuggestionForm({ onSuggest, isLoading }: RouteSuggestionFor
 
   const geocodeLocation = async (locationName: string): Promise<LocationSuggestion | null> => {
     try {
+      console.log('Geocoding location:', locationName)
       const response = await fetch("/api/geocode", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ location: locationName }),
       })
+      
       const data = await response.json()
-      return data.location || null
+      console.log('Geocode response:', data)
+      
+      // Return location even if response is not ok, as API now always returns valid coordinates
+      if (data.location) {
+        return data.location
+      }
+      
+      console.error('No location in response:', data)
+      return null
     } catch (error) {
       console.error("Geocoding error:", error)
       return null
@@ -49,15 +59,21 @@ export function RouteSuggestionForm({ onSuggest, isLoading }: RouteSuggestionFor
     setStartLocation(value)
     if (value.length > 2) {
       setGeocodingLoading(true)
-      const response = await fetch("/api/geocode-suggestions", {
-        method: "POST",
-        headers: { "Content-Type": "application/javascript" },
-        body: JSON.stringify({ query: value }),
-      })
-      const data = await response.json()
-      setStartSuggestions(data.suggestions || [])
-      setShowStartSuggestions(true)
-      setGeocodingLoading(false)
+      try {
+        const response = await fetch("/api/geocode-suggestions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: value }),
+        })
+        const data = await response.json()
+        console.log('Start location suggestions:', data.suggestions)
+        setStartSuggestions(data.suggestions || [])
+        setShowStartSuggestions(true)
+      } catch (error) {
+        console.error('Error fetching start suggestions:', error)
+      } finally {
+        setGeocodingLoading(false)
+      }
     } else {
       setStartSuggestions([])
       setShowStartSuggestions(false)
@@ -68,15 +84,21 @@ export function RouteSuggestionForm({ onSuggest, isLoading }: RouteSuggestionFor
     setEndLocation(value)
     if (value.length > 2) {
       setGeocodingLoading(true)
-      const response = await fetch("/api/geocode-suggestions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: value }),
-      })
-      const data = await response.json()
-      setEndSuggestions(data.suggestions || [])
-      setShowEndSuggestions(true)
-      setGeocodingLoading(false)
+      try {
+        const response = await fetch("/api/geocode-suggestions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: value }),
+        })
+        const data = await response.json()
+        console.log('End location suggestions:', data.suggestions)
+        setEndSuggestions(data.suggestions || [])
+        setShowEndSuggestions(true)
+      } catch (error) {
+        console.error('Error fetching end suggestions:', error)
+      } finally {
+        setGeocodingLoading(false)
+      }
     } else {
       setEndSuggestions([])
       setShowEndSuggestions(false)
@@ -98,12 +120,21 @@ export function RouteSuggestionForm({ onSuggest, isLoading }: RouteSuggestionFor
     setGeocodingLoading(true)
 
     try {
+      console.log('Submitting route suggestion with:', { startLocation, endLocation })
       const startPoint = await geocodeLocation(startLocation)
       const endPoint = await geocodeLocation(endLocation)
 
+      console.log('Geocoded points:', { startPoint, endPoint })
       if (startPoint && endPoint) {
+        console.log('Calling onSuggest with:', { startPoint, endPoint })
         onSuggest({ lat: startPoint.lat, lng: startPoint.lng }, { lat: endPoint.lat, lng: endPoint.lng })
+      } else {
+        console.error('Failed to geocode locations:', { startPoint, endPoint })
+        alert('Failed to geocode locations. Please try again.')
       }
+    } catch (error) {
+      console.error('Error in handleSubmit:', error)
+      alert('Error suggesting routes: ' + (error instanceof Error ? error.message : 'Unknown error'))
     } finally {
       setGeocodingLoading(false)
     }

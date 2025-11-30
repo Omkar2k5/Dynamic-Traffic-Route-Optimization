@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Card } from "@/components/ui/card"
 import type { RoutePoint, SuggestedRoute } from "@/lib/route-utils"
 
@@ -8,16 +8,41 @@ interface RouteMapDisplayProps {
   startPoint: RoutePoint | null
   endPoint: RoutePoint | null
   selectedRoute: SuggestedRoute | null
+  allRoutes?: SuggestedRoute[]
 }
 
-export function RouteMapDisplay({ startPoint, endPoint, selectedRoute }: RouteMapDisplayProps) {
+export function RouteMapDisplay({ startPoint, endPoint, selectedRoute, allRoutes = [] }: RouteMapDisplayProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<any>(null)
-  const directionsService = useRef<any>(null)
-  const directionsRenderer = useRef<any>(null)
+  const polylines = useRef<any[]>([])
+  const startMarker = useRef<any>(null)
+  const endMarker = useRef<any>(null)
+  const [googleLoaded, setGoogleLoaded] = useState(false)
+
+  // Route colors for different routes
+  const routeColors = ["#00d4ff", "#ff6b6b", "#51cf66", "#ffd43b", "#a78bfa"]
+
+  // Wait for Google Maps to be loaded
+  useEffect(() => {
+    const checkGoogleMaps = () => {
+      const google = (window as any).google
+      if (google && google.maps) {
+        console.log('Google Maps API detected in route-map-display')
+        setGoogleLoaded(true)
+      } else {
+        console.log('Waiting for Google Maps API...')
+        setTimeout(checkGoogleMaps, 100)
+      }
+    }
+    
+    checkGoogleMaps()
+  }, [])
 
   useEffect(() => {
-    if (!mapContainer.current || !startPoint || !endPoint) return
+    // Only run when we have all required data
+    if (!mapContainer.current || !startPoint || !endPoint || !googleLoaded) {
+      return
+    }
 
     const google = (window as any).google
     if (!google || !google.maps) {
@@ -25,6 +50,7 @@ export function RouteMapDisplay({ startPoint, endPoint, selectedRoute }: RouteMa
       return
     }
 
+    // Initialize map only once
     if (!map.current) {
       map.current = new google.maps.Map(mapContainer.current, {
         zoom: 12,
@@ -76,35 +102,68 @@ export function RouteMapDisplay({ startPoint, endPoint, selectedRoute }: RouteMa
         ],
       })
 
-      directionsService.current = new google.maps.DirectionsService()
-      directionsRenderer.current = new google.maps.DirectionsRenderer({
+      // Add start marker
+      startMarker.current = new google.maps.Marker({
+        position: { lat: startPoint.lat, lng: startPoint.lng },
         map: map.current,
-        polylineOptions: {
-          strokeColor: "#00d4ff",
-          strokeWeight: 4,
-          strokeOpacity: 0.8,
+        title: "Start",
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: "#4285f4",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
         },
-        markerOptions: {
-          icon: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+      })
+
+      // Add end marker
+      endMarker.current = new google.maps.Marker({
+        position: { lat: endPoint.lat, lng: endPoint.lng },
+        map: map.current,
+        title: "End",
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: "#ea4335",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
         },
       })
     }
 
-    if (directionsService.current && directionsRenderer.current) {
-      directionsService.current.route(
-        {
-          origin: { lat: startPoint.lat, lng: startPoint.lng },
-          destination: { lat: endPoint.lat, lng: endPoint.lng },
-          travelMode: google.maps.TravelMode.DRIVING,
-        },
-        (result: any, status: any) => {
-          if (status === google.maps.DirectionsStatus.OK && directionsRenderer.current) {
-            directionsRenderer.current.setDirections(result)
-          }
-        },
-      )
+    // Clear previous polylines
+    polylines.current.forEach((polyline) => {
+      polyline.setMap(null)
+    })
+    polylines.current = []
+
+    // Display all routes using polylines (no Directions API needed)
+    if (allRoutes.length > 0) {
+      allRoutes.forEach((route, index) => {
+        const isSelected = selectedRoute?.id === route.id
+        const color = routeColors[index % routeColors.length]
+        const weight = isSelected ? 5 : 3
+        const opacity = isSelected ? 1 : 0.6
+
+        // Create polyline from route points
+        if (route.route && route.route.length > 0) {
+          const polyline = new google.maps.Polyline({
+            path: route.route,
+            geodesic: true,
+            strokeColor: color,
+            strokeOpacity: opacity,
+            strokeWeight: weight,
+            map: map.current,
+          })
+
+          polylines.current.push(polyline)
+        }
+      })
     }
-  }, [startPoint, endPoint])
+    // Only trigger when critical dependencies change, not on every prop change
+  }, [startPoint?.lat, startPoint?.lng, endPoint?.lat, endPoint?.lng, selectedRoute?.id, allRoutes.length, googleLoaded])
 
   return (
     <Card className="p-4 bg-card border-card-border overflow-hidden">

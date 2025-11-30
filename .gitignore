@@ -25,3 +25,25 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# Python virtual environment files
+.env
+.venv/
+venv/
+ENV/
+env/
+.ENV/
+ENV/
+
+# ML model specific virtual environments
+traffic_congestion/venv/
+traffic_congestion/.venv/
+traffic_congestion/env/
+traffic_congestion/.env/
