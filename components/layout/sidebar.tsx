@@ -19,7 +19,7 @@ const navItems = [
     icon: AlertTriangle,
   },
   {
-    label: "Routes",
+    label: "Delayed Routes",
     href: "/routes",
     icon: Navigation,
   },
@@ -32,16 +32,6 @@ const navItems = [
     label: "CCTV Monitoring",
     href: "/cctv",
     icon: Camera,
-  },
-  {
-    label: "Analytics",
-    href: "/analytics",
-    icon: BarChart3,
-  },
-  {
-    label: "Settings",
-    href: "/settings",
-    icon: Settings,
   },
 ]
 

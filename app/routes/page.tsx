@@ -12,8 +12,8 @@ export default function RoutesPage() {
     <DashboardLayout>
       <div className="space-y-4 h-full flex flex-col">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Route Optimization</h1>
-          <p className="text-muted-foreground mt-1">Optimize traffic routes and reduce congestion</p>
+          <h1 className="text-3xl font-bold text-foreground">Delayed Routes</h1>
+          <p className="text-muted-foreground mt-1">Monitor and manage delayed traffic routes to reduce congestion</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 overflow-auto">

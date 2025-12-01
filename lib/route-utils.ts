@@ -14,6 +14,8 @@ export interface SuggestedRoute {
   trafficIssues: TrafficIssueOnRoute[]
   isAlternate: boolean
   timeSavings?: number
+  score?: number
+  hasHighway?: boolean
 }
 
 export interface TrafficIssueOnRoute {

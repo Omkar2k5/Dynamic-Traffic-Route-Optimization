@@ -7,12 +7,24 @@ import { RouteSuggestionResults } from "@/components/route-suggestion/route-sugg
 import { RouteMapDisplay } from "@/components/route-suggestion/route-map-display"
 import type { RoutePoint, SuggestedRoute } from "@/lib/route-utils"
 
+interface TimePreference {
+  isDay: boolean
+  preference: 'fastest' | 'safest'
+  reason: string
+  currentTime: {
+    timeString: string
+    period: 'Day' | 'Night'
+    nextChange: string
+  }
+}
+
 export default function RouteSuggestionPage() {
   const [suggestedRoutes, setSuggestedRoutes] = useState<SuggestedRoute[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [selectedRoute, setSelectedRoute] = useState<SuggestedRoute | null>(null)
   const [startPoint, setStartPoint] = useState<RoutePoint | null>(null)
   const [endPoint, setEndPoint] = useState<RoutePoint | null>(null)
+  const [timePreference, setTimePreference] = useState<TimePreference | null>(null)
   const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
@@ -38,9 +50,16 @@ export default function RouteSuggestionPage() {
         throw new Error(`API error: ${response.status} ${response.statusText}`)
       }
 
-      const routes = await response.json()
-      console.log('Routes received:', routes)
+      const data = await response.json()
+      console.log('Routes received:', data)
+      
+      // Handle both new format (with time preference) and legacy format (just routes)
+      const routes = data.routes || data
+      const timePref = data.timePreference
+      
       setSuggestedRoutes(routes)
+      setTimePreference(timePref || null)
+      
       if (routes.length > 0) {
         setSelectedRoute(routes[0])
       }
@@ -98,6 +117,7 @@ export default function RouteSuggestionPage() {
               selectedRoute={selectedRoute}
               onSelectRoute={setSelectedRoute}
               isLoading={isLoading}
+              timePreference={timePreference || undefined}
             />
           </div>
         </div>

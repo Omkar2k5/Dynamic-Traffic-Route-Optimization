@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Card } from "@/components/ui/card"
+import { loadGoogleMapsAPI, getGoogleMapsConfig, isGoogleMapsAPILoaded } from "@/lib/google-maps-loader"
 import type { RoutePoint, SuggestedRoute } from "@/lib/route-utils"
 
 interface RouteMapDisplayProps {
@@ -18,24 +19,46 @@ export function RouteMapDisplay({ startPoint, endPoint, selectedRoute, allRoutes
   const startMarker = useRef<any>(null)
   const endMarker = useRef<any>(null)
   const [googleLoaded, setGoogleLoaded] = useState(false)
+  const [mapsConfig, setMapsConfig] = useState<any>(null)
+  const [loadingError, setLoadingError] = useState<string | null>(null)
 
   // Route colors for different routes
   const routeColors = ["#00d4ff", "#ff6b6b", "#51cf66", "#ffd43b", "#a78bfa"]
 
-  // Wait for Google Maps to be loaded
+  // Load Google Maps API on component mount
   useEffect(() => {
-    const checkGoogleMaps = () => {
-      const google = (window as any).google
-      if (google && google.maps) {
-        console.log('Google Maps API detected in route-map-display')
+    const initializeGoogleMaps = async () => {
+      try {
+        // Check if already loaded
+        if (isGoogleMapsAPILoaded()) {
+          console.log('Google Maps API already loaded')
+          setGoogleLoaded(true)
+          return
+        }
+
+        console.log('Loading Google Maps API...')
+        const config = await getGoogleMapsConfig()
+        console.log('Maps config:', config)
+        setMapsConfig(config)
+
+        // Check if running in demo mode
+        if (config.apiKey === 'demo') {
+          console.log('Running in demo mode - maps will not be interactive')
+          setGoogleLoaded(true)
+          return
+        }
+
+        await loadGoogleMapsAPI(config)
+        console.log('Google Maps API loaded successfully')
         setGoogleLoaded(true)
-      } else {
-        console.log('Waiting for Google Maps API...')
-        setTimeout(checkGoogleMaps, 100)
+      } catch (error) {
+        console.error('Failed to load Google Maps API:', error)
+        setLoadingError(error instanceof Error ? error.message : 'Failed to load maps')
+        setGoogleLoaded(true) // Set to true to show fallback
       }
     }
-    
-    checkGoogleMaps()
+
+    initializeGoogleMaps()
   }, [])
 
   useEffect(() => {
@@ -45,8 +68,8 @@ export function RouteMapDisplay({ startPoint, endPoint, selectedRoute, allRoutes
     }
 
     const google = (window as any).google
-    if (!google || !google.maps) {
-      console.error("Google Maps API not loaded")
+    if (!google || !google.maps || mapsConfig?.apiKey === 'demo') {
+      console.warn("Google Maps API not available or in demo mode")
       return
     }
 
@@ -164,6 +187,41 @@ export function RouteMapDisplay({ startPoint, endPoint, selectedRoute, allRoutes
     }
     // Only trigger when critical dependencies change, not on every prop change
   }, [startPoint?.lat, startPoint?.lng, endPoint?.lat, endPoint?.lng, selectedRoute?.id, allRoutes.length, googleLoaded])
+
+  // Show loading state
+  if (!googleLoaded) {
+    return (
+      <Card className="p-4 bg-card border-card-border overflow-hidden">
+        <div className="w-full h-96 rounded-lg bg-background flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading Maps...</p>
+          </div>
+        </div>
+      </Card>
+    )
+  }
+
+  // Show error state
+  if (loadingError && mapsConfig?.apiKey === 'demo') {
+    return (
+      <Card className="p-4 bg-card border-card-border overflow-hidden">
+        <div className="w-full h-96 rounded-lg bg-background flex items-center justify-center">
+          <div className="text-center max-w-md">
+            <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-foreground mb-2">Maps Configuration Needed</h3>
+            <p className="text-muted-foreground text-sm">
+              Google Maps API key is not configured. Set <code className="bg-muted px-2 py-1 rounded text-xs">GOOGLE_MAPS_API_KEY</code> and <code className="bg-muted px-2 py-1 rounded text-xs">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> environment variables for full functionality.
+            </p>
+          </div>
+        </div>
+      </Card>
+    )
+  }
 
   return (
     <Card className="p-4 bg-card border-card-border overflow-hidden">

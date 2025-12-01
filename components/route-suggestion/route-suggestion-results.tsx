@@ -2,7 +2,7 @@
 
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { AlertTriangle, Clock, MapPin, TrendingDown } from "lucide-react"
+import { AlertTriangle, Clock, MapPin, TrendingDown, Sun, Moon, Star } from "lucide-react"
 import type { SuggestedRoute } from "@/lib/route-utils"
 
 interface RouteSuggestionResultsProps {
@@ -10,6 +10,16 @@ interface RouteSuggestionResultsProps {
   selectedRoute: SuggestedRoute | null
   onSelectRoute: (route: SuggestedRoute) => void
   isLoading: boolean
+  timePreference?: {
+    isDay: boolean
+    preference: 'fastest' | 'safest'
+    reason: string
+    currentTime: {
+      timeString: string
+      period: 'Day' | 'Night'
+      nextChange: string
+    }
+  }
 }
 
 export function RouteSuggestionResults({
@@ -17,6 +27,7 @@ export function RouteSuggestionResults({
   selectedRoute,
   onSelectRoute,
   isLoading,
+  timePreference,
 }: RouteSuggestionResultsProps) {
   if (isLoading) {
     return (
@@ -40,6 +51,40 @@ export function RouteSuggestionResults({
 
   return (
     <div className="space-y-4">
+      {/* Time Preference Indicator */}
+      {timePreference && (
+        <Card className="p-4 bg-card border-card-border">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-full ${timePreference.isDay ? 'bg-yellow-100 text-yellow-600' : 'bg-blue-100 text-blue-600'}`}>
+              {timePreference.isDay ? (
+                <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <h4 className="font-medium text-foreground">
+                  {timePreference.currentTime.timeString} • {timePreference.currentTime.period}
+                </h4>
+                <Badge variant="outline" className="text-xs">
+                  {timePreference.preference === 'fastest' ? 'Speed Priority' : 'Safety Priority'}
+                </Badge>
+              </div>
+              <p className="text-sm text-foreground/60">{timePreference.reason}</p>
+              <p className="text-xs text-foreground/40 mt-1">{timePreference.currentTime.nextChange}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <Star className="w-4 h-4 text-yellow-500" />
+              <span className="text-sm font-medium text-foreground">
+                Best Match
+              </span>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Route Results */}
       {routes.map((route) => (
         <Card
           key={route.id}
@@ -59,11 +104,21 @@ export function RouteSuggestionResults({
                     Alternate
                   </Badge>
                 )}
+                {route.hasHighway && (
+                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
+                    Highway Route
+                  </Badge>
+                )}
               </h3>
               {route.timeSavings && route.timeSavings > 0 && (
                 <p className="text-sm text-accent flex items-center gap-1 mt-1">
                   <TrendingDown className="w-4 h-4" />
                   Save ~{Math.round(route.timeSavings)} min
+                </p>
+              )}
+              {route.score !== undefined && (
+                <p className="text-xs text-foreground/60 mt-1">
+                  Smart Score: {Math.round(route.score)}/100
                 </p>
               )}
             </div>

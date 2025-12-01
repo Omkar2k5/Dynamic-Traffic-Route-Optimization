@@ -9,9 +9,22 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = process.env.GOOGLE_MAPS_API_KEY
-    if (!apiKey) {
-      console.warn("Google Maps API key not configured")
-      return NextResponse.json({ error: "API key not configured" }, { status: 500 })
+    if (!apiKey || apiKey === 'your_google_maps_api_key_here') {
+      console.warn("Google Maps API key not configured, using fallback coordinates")
+      // Generate fallback coordinates based on location hash
+      const hash = location.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+      const lat = 15.0 + (hash % 20) * 0.5 // Range: 15-25 (covers most of India)
+      const lng = 72.0 + (hash % 30) * 0.5 // Range: 72-87 (covers most of India)
+
+      return NextResponse.json({
+        location: {
+          name: location,
+          lat,
+          lng,
+        },
+        fallback: true,
+        message: "Using fallback coordinates - configure GOOGLE_MAPS_API_KEY for accurate geocoding"
+      })
     }
 
     // Use Google Geocoding API

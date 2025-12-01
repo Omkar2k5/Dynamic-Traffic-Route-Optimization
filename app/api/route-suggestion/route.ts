@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { suggestRoutes, calculateDistance } from "@/lib/route-utils"
+import { getTimePreference, getCurrentTimeStatus, calculateRouteScore } from "@/lib/time-utils"
 import { mockCCTVCameras, mockMLDetections, mockCCTVAnalytics } from "@/lib/mock-data"
 import type { SuggestedRoute } from "@/lib/route-utils"
 
@@ -15,8 +16,33 @@ export async function POST(request: NextRequest) {
     if (!apiKey) {
       console.warn("Google Maps API key not configured, using mock routes")
       // Fallback to mock routes if API key not available
+      const timePreference = getTimePreference()
       const routes = suggestRoutes(startPoint, endPoint, mockCCTVCameras, mockMLDetections, mockCCTVAnalytics)
-      return NextResponse.json(routes)
+      
+      // Add scores and time preference info to mock routes
+      const scoredRoutes = routes.map((route, index) => {
+        const hasHighway = route.isAlternate || index === 0 // Simple heuristic
+        const score = calculateRouteScore({
+          distance: route.distance,
+          estimatedTime: route.estimatedTime,
+          hasHighway,
+          trafficIssuesCount: route.trafficIssues.length,
+        }, timePreference)
+        
+        return {
+          ...route,
+          score,
+          hasHighway,
+        }
+      }).sort((a, b) => (b.score || 0) - (a.score || 0))
+      
+      return NextResponse.json({
+        routes: scoredRoutes,
+        timePreference: {
+          ...timePreference,
+          currentTime: getCurrentTimeStatus()
+        }
+      })
     }
 
     try {
@@ -37,6 +63,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(routes)
       }
 
+      // Get current time preference for intelligent routing
+      const timePreference = getTimePreference()
+      
       // Convert Google Directions routes to our format
       const suggestedRoutes: SuggestedRoute[] = directionsData.routes.map((route: any, index: number) => {
         const leg = route.legs[0]
@@ -77,6 +106,22 @@ export async function POST(request: NextRequest) {
         const isAlternate = index > 0
         const timeSavings = isAlternate ? directionsData.routes[0].legs[0].duration.value / 60 - estimatedTime : undefined
 
+        // Check if route uses highways (simplified heuristic)
+        const hasHighway = route.summary && (
+          route.summary.toLowerCase().includes('highway') || 
+          route.summary.toLowerCase().includes('expressway') ||
+          route.summary.toLowerCase().includes('interstate') ||
+          index === 0 // First route often uses highways
+        )
+
+        // Calculate time-based score
+        const routeScore = calculateRouteScore({
+          distance,
+          estimatedTime,
+          hasHighway,
+          trafficIssuesCount: trafficIssues.length,
+        }, timePreference)
+
         return {
           id: `route-${index}`,
           name: index === 0 ? "Recommended Route" : `Alternative Route ${index}`,
@@ -86,15 +131,52 @@ export async function POST(request: NextRequest) {
           trafficIssues,
           isAlternate,
           timeSavings: timeSavings && timeSavings > 0 ? timeSavings : undefined,
+          score: routeScore,
+          hasHighway,
         }
       })
 
-      return NextResponse.json(suggestedRoutes)
+      // Sort routes by score (best first)
+      suggestedRoutes.sort((a, b) => (b.score || 0) - (a.score || 0))
+
+      // Return routes with time preference info
+      return NextResponse.json({
+        routes: suggestedRoutes,
+        timePreference: {
+          ...timePreference,
+          currentTime: getCurrentTimeStatus()
+        }
+      })
     } catch (apiError) {
       console.error("Google Directions API error:", apiError)
       // Fallback to mock routes if API fails
+      const timePreference = getTimePreference()
       const routes = suggestRoutes(startPoint, endPoint, mockCCTVCameras, mockMLDetections, mockCCTVAnalytics)
-      return NextResponse.json(routes)
+      
+      // Add scores and time preference info to mock routes
+      const scoredRoutes = routes.map((route, index) => {
+        const hasHighway = route.isAlternate || index === 0 // Simple heuristic
+        const score = calculateRouteScore({
+          distance: route.distance,
+          estimatedTime: route.estimatedTime,
+          hasHighway,
+          trafficIssuesCount: route.trafficIssues.length,
+        }, timePreference)
+        
+        return {
+          ...route,
+          score,
+          hasHighway,
+        }
+      }).sort((a, b) => (b.score || 0) - (a.score || 0))
+      
+      return NextResponse.json({
+        routes: scoredRoutes,
+        timePreference: {
+          ...timePreference,
+          currentTime: getCurrentTimeStatus()
+        }
+      })
     }
   } catch (error) {
     console.error("Route suggestion error:", error)

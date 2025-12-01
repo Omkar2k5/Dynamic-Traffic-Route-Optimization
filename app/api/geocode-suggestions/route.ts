@@ -9,9 +9,21 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = process.env.GOOGLE_MAPS_API_KEY
-    if (!apiKey) {
-      console.warn("Google Maps API key not configured")
-      return NextResponse.json({ suggestions: [] })
+    if (!apiKey || apiKey === 'your_google_maps_api_key_here') {
+      console.warn("Google Maps API key not configured, returning basic suggestions")
+      // Generate basic suggestions when API key is not available
+      const basicSuggestions = [
+        { name: `${query}, India`, lat: 20.5937, lng: 78.9629 },
+        { name: `${query}, Mumbai, India`, lat: 19.0760, lng: 72.8777 },
+        { name: `${query}, Delhi, India`, lat: 28.7041, lng: 77.1025 },
+        { name: `${query}, Bangalore, India`, lat: 12.9716, lng: 77.5946 },
+      ]
+      
+      return NextResponse.json({ 
+        suggestions: basicSuggestions,
+        fallback: true,
+        message: "Using basic suggestions - configure GOOGLE_MAPS_API_KEY for comprehensive location search"
+      })
     }
 
     // Use Google Places API for autocomplete

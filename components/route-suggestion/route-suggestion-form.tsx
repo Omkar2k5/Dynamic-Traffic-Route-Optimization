@@ -242,30 +242,7 @@ export function RouteSuggestionForm({ onSuggest, isLoading }: RouteSuggestionFor
         </Button>
       </form>
 
-      {/* Quick Presets */}
-      <div className="mt-6 pt-6 border-t border-card-border">
-        <p className="text-xs font-medium text-foreground/60 mb-3">Quick Presets</p>
-        <div className="space-y-2">
-          <button
-            onClick={() => {
-              setStartLocation("Downtown San Francisco, CA")
-              setEndLocation("San Jose Airport, CA")
-            }}
-            className="w-full text-left px-3 py-2 rounded text-sm bg-accent/10 hover:bg-accent/20 text-accent transition-colors"
-          >
-            Downtown SF → Airport
-          </button>
-          <button
-            onClick={() => {
-              setStartLocation("Oakland, CA")
-              setEndLocation("San Francisco, CA")
-            }}
-            className="w-full text-left px-3 py-2 rounded text-sm bg-accent/10 hover:bg-accent/20 text-accent transition-colors"
-          >
-            Oakland → San Francisco
-          </button>
-        </div>
-      </div>
+
     </Card>
   )
 }
