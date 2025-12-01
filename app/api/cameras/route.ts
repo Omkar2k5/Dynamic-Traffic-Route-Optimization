@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  getAllCameras,
-  addCamera,
-  updateCamera,
-  deleteCamera,
-  updateTrafficStatus,
-  updateAccidentStatus
-} from '@/lib/firebase-service';
-import type { CameraData, CameraUpdateRequest } from '@/lib/firebase-types';
+import { staticDatabase, CCTVLocation } from '@/lib/static-database';
 
 // GET - Fetch all cameras
 export async function GET() {
   try {
-    const cameras = await getAllCameras();
+    const cameras = staticDatabase.getAllCameras();
     return NextResponse.json({ cameras, total: cameras.length });
   } catch (error) {
     console.error('Error fetching cameras:', error);
@@ -23,7 +15,7 @@ export async function GET() {
   }
 }
 
-// POST - Add new camera
+// POST - Add new camera (not supported in static database)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -36,8 +28,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await addCamera(cameraNumber, coordinates, name, location);
-    return NextResponse.json({ success: true, cameraNumber: result });
+    // Static database doesn't support adding new cameras
+    return NextResponse.json(
+      { error: 'Camera management is read-only in static database mode' },
+      { status: 403 }
+    );
   } catch (error) {
     console.error('Error adding camera:', error);
     return NextResponse.json(
@@ -47,7 +42,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT - Update camera
+// PUT - Update camera (not supported in static database)
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
@@ -60,8 +55,11 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    await updateCamera(cameraNumber, updateData);
-    return NextResponse.json({ success: true });
+    // Static database doesn't support updating cameras
+    return NextResponse.json(
+      { error: 'Camera management is read-only in static database mode' },
+      { status: 403 }
+    );
   } catch (error) {
     console.error('Error updating camera:', error);
     return NextResponse.json(
@@ -71,7 +69,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE - Delete camera
+// DELETE - Delete camera (not supported in static database)
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -84,8 +82,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await deleteCamera(cameraNumber);
-    return NextResponse.json({ success: true });
+    // Static database doesn't support deleting cameras
+    return NextResponse.json(
+      { error: 'Camera management is read-only in static database mode' },
+      { status: 403 }
+    );
   } catch (error) {
     console.error('Error deleting camera:', error);
     return NextResponse.json(

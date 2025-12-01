@@ -1,0 +1,7 @@
+# Placeholder for accident detection model  
+# This file should contain the actual trained YOLO model
+# Copy from: ML model/Accident Detection/Object-Detection-main/backend/best.pt
+
+# For now, this is a placeholder file
+# The actual implementation will use the trained model file
+# Location: /models/accident_detection/best.pt

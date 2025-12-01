@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updateTrafficStatus } from '@/lib/firebase-service';
+import { staticDatabase } from '@/lib/static-database';
 
 // PUT - Update camera traffic status
 export async function PUT(request: NextRequest) {
@@ -14,7 +14,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    await updateTrafficStatus(cameraNumber, trafficStatus);
+    staticDatabase.updateTrafficData(cameraNumber, trafficStatus);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error updating traffic status:', error);

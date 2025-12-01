@@ -1,0 +1,7 @@
+# Placeholder for traffic congestion model
+# This file should contain the actual trained YOLO model
+# Copy from: ML model/traffic_congestion/traffic_congestion/models/best.pt
+
+# For now, this is a placeholder file
+# The actual implementation will use the trained model file
+# Location: /models/traffic_congestion/best.pt

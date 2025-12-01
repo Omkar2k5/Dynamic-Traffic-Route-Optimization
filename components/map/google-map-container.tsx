@@ -5,8 +5,7 @@ import { MapControls } from "./map-controls"
 import { MapLegend } from "./map-legend"
 import { LocationInput } from "./location-input"
 import { mockIncidents, mockSignals } from "@/lib/mock-data"
-import { subscribeToCameras, initializeSampleData } from "@/lib/firebase-service"
-import type { CameraData } from "@/lib/firebase-types"
+import { staticDatabase, CCTVLocation } from "@/lib/static-database"
 
 declare global {
   interface Window {
@@ -23,7 +22,7 @@ export function GoogleMapContainer() {
   const markersRef = useRef<any[]>([])
   const [apiKeyLoaded, setApiKeyLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [cameras, setCameras] = useState<CameraData[]>([])
+  const [cameras, setCameras] = useState<CCTVLocation[]>([])
   const [cameraMarkersRef] = useState<any[]>([])
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number, address: string} | null>(null)
   const [userLocationMarker, setUserLocationMarker] = useState<any>(null)
@@ -273,16 +272,23 @@ export function GoogleMapContainer() {
         // Fetch API key and load script
         console.log('Fetching Google Maps config...')
         const response = await fetch('/api/maps-config')
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || 'Failed to get API key')
+        const config = await response.json()
+        
+        if (config.demo || !config.apiKey) {
+          console.log('Running in demo mode - no API key available')
+          setError('Google Maps API key not configured. Running in demo mode.')
+          setApiKeyLoaded(true) // Set to true to allow demo mode
+          return
         }
         
-        const { apiKey } = await response.json()
+        const { apiKey } = config
         console.log('Config received:', { apiKey: !!apiKey, keyLength: apiKey?.length })
 
         if (!apiKey) {
-          throw new Error('API key is empty')
+          console.log('No API key available, switching to demo mode')
+          setError('Google Maps API key not configured. Running in demo mode.')
+          setApiKeyLoaded(true) // Set to true to allow demo mode
+          return
         }
 
         // Load Google Maps script
@@ -374,44 +380,37 @@ export function GoogleMapContainer() {
     }
   }, [apiKeyLoaded, currentLocation]) // Removed 'map' from dependencies to prevent infinite loop
 
-  // Subscribe to Firebase camera data
+  // Subscribe to static camera data
   useEffect(() => {
     if (!map) return
 
-    console.log('Map is ready, initializing Firebase integration')
-    
-    let unsubscribe: (() => void) | null = null
-    let initDataPromise: Promise<void> | null = null
+    console.log('Map is ready, initializing camera integration')
     
     try {
-      unsubscribe = subscribeToCameras((camerasData) => {
-        console.log('Received camera data:', camerasData.length, 'cameras')
-        setCameras(camerasData)
-        if (map && camerasData.length > 0) {
-          addCameraMarkers(map, camerasData)
-        }
-      })
-
-      // Initialize sample data if no cameras exist (only once)
-      initDataPromise = (async () => {
-        try {
-          await initializeSampleData()
-          console.log('Sample camera data initialized')
-        } catch (err) {
-          console.log('Sample data already exists or failed to initialize:', err)
-        }
-      })()
-    } catch (err) {
-      console.error('Firebase integration error:', err)
-    }
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe()
+      // Load static camera data
+      const cameraData = staticDatabase.getAllCameras()
+      console.log('Loaded camera data:', cameraData.length, 'cameras')
+      setCameras(cameraData)
+      if (map && cameraData.length > 0) {
+        addCameraMarkers(map, cameraData)
       }
-      // Note: We don't need to cancel initDataPromise as it's fire-and-forget
+
+      // Set up real-time updates every 30 seconds
+      const interval = setInterval(() => {
+        const updatedCameras = staticDatabase.getAllCameras()
+        setCameras(updatedCameras)
+        if (map && updatedCameras.length > 0) {
+          addCameraMarkers(map, updatedCameras)
+        }
+      }, 30000)
+
+      return () => {
+        clearInterval(interval)
+      }
+    } catch (err) {
+      console.error('Camera integration error:', err)
     }
-  }, [map]) // Keep map dependency but ensure it only subscribes once per map instance
+  }, [map])
 
   // Handle user location selection
   const handleLocationSelect = (location: { lat: number; lng: number; address: string }) => {
@@ -540,32 +539,32 @@ export function GoogleMapContainer() {
     })
   }
 
-  const addCameraMarkers = (mapInstance: any, camerasData: CameraData[]) => {
+  const addCameraMarkers = (mapInstance: any, camerasData: CCTVLocation[]) => {
     // Clear existing camera markers
     cameraMarkersRef.forEach((marker) => marker.setMap(null))
     cameraMarkersRef.length = 0
 
-    // Add camera markers from Firebase
+    // Add camera markers from static database
     camerasData.forEach((camera) => {
       // Determine marker color based on traffic and accident status
       let color = "#22c55e" // Green for normal
-      let title = `Camera: ${camera.cameraNumber}`
+      let title = `Camera: ${camera.id}`
       
-      if (camera.accidentStatus.isAccident) {
+      if (camera.accidentData.isAccident) {
         color = "#ef4444" // Red for accidents
-        title += ` - ACCIDENT (${camera.accidentStatus.severity?.toUpperCase()})`
-      } else if (camera.trafficStatus.congestionLevel === "high") {
+        title += ` - ACCIDENT (${camera.accidentData.severity?.toUpperCase()})`
+      } else if (camera.trafficData.congestionLevel === "HEAVY" || camera.trafficData.congestionLevel === "TRAFFIC_JAM") {
         color = "#f97316" // Orange for high traffic
         title += ` - High Traffic`
-      } else if (camera.trafficStatus.congestionLevel === "medium") {
+      } else if (camera.trafficData.congestionLevel === "MODERATE") {
         color = "#eab308" // Yellow for medium traffic
         title += ` - Medium Traffic`
       }
       
       const marker = new window.google.maps.Marker({
         position: {
-          lat: camera.coordinates.latitude,
-          lng: camera.coordinates.longitude
+          lat: camera.latitude,
+          lng: camera.longitude
         },
         map: mapInstance,
         title,
@@ -584,15 +583,15 @@ export function GoogleMapContainer() {
         content: `
           <div style="color: #333; font-family: system-ui;">
             <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">
-              ${camera.name || camera.cameraNumber}
+              ${camera.name}
             </h3>
             <p style="margin: 0 0 4px 0; font-size: 12px; color: #666;">
-              ${camera.location || 'Location not specified'}
+              ${camera.location}
             </p>
             <div style="font-size: 11px; color: #888;">
-              <div>Traffic: ${camera.trafficStatus.congestionLevel} (${camera.trafficStatus.vehicleCount} vehicles)</div>
-              <div>Speed: ${camera.trafficStatus.averageSpeed} km/h</div>
-              ${camera.accidentStatus.isAccident ? 
+              <div>Traffic: ${camera.trafficData.congestionLevel} (${camera.trafficData.vehicleCount} vehicles)</div>
+              <div>Speed: ${camera.trafficData.averageSpeed} km/h</div>
+              ${camera.accidentData.isAccident ? 
                 `<div style="color: #ef4444; font-weight: 600;">⚠️ ACCIDENT DETECTED</div>` : 
                 '<div style="color: #22c55e;">✓ No incidents</div>'
               }
@@ -604,8 +603,8 @@ export function GoogleMapContainer() {
       marker.addListener("click", () => {
         infoWindow.open(mapInstance, marker)
         mapInstance.panTo({
-          lat: camera.coordinates.latitude,
-          lng: camera.coordinates.longitude
+          lat: camera.latitude,
+          lng: camera.longitude
         })
         mapInstance.setZoom(16)
       })
@@ -640,29 +639,84 @@ export function GoogleMapContainer() {
 
   console.log('Render state:', { error, apiKeyLoaded, map: !!map })
 
-  if (error) {
+  if (error && !apiKeyLoaded) {
     return (
       <div className="relative w-full h-full min-h-[400px] rounded-lg overflow-hidden bg-slate-900 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-2">Error loading map</p>
+          <p className="text-orange-400 mb-2">Demo Mode</p>
           <p className="text-xs text-slate-500">{error}</p>
-          <button 
-            onClick={() => window.location.reload()} 
-            className="mt-2 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-          >
-            Retry
-          </button>
+          <p className="text-xs text-slate-400 mt-2">Map functionality limited without API key</p>
         </div>
       </div>
     )
   }
 
-  if (!apiKeyLoaded) {
+  if (!apiKeyLoaded && !error) {
     return (
       <div className="relative w-full h-full min-h-[400px] rounded-lg overflow-hidden bg-slate-900 flex items-center justify-center">
         <div className="text-center">
           <p className="text-slate-400 mb-2">Loading map...</p>
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show demo map when API key is not available but we're in demo mode
+  if (error && apiKeyLoaded) {
+    return (
+      <div className="relative w-full h-full min-h-[400px] rounded-lg overflow-hidden bg-slate-900">
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
+          <div className="text-center text-slate-400">
+            <div className="w-96 h-72 bg-slate-700 rounded-lg border-2 border-blue-500/30 relative overflow-hidden mx-auto mb-4">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20"></div>
+              <div className="absolute inset-0 grid grid-cols-6 grid-rows-4 gap-1 p-4">
+                {Array.from({ length: 24 }, (_, i) => (
+                  <div 
+                    key={i}
+                    className={`rounded ${Math.random() > 0.7 ? 'bg-blue-400/30' : 'bg-slate-600/50'}`}
+                  ></div>
+                ))}
+              </div>
+              <div className="absolute bottom-4 left-4 right-4">
+                <div className="bg-black/50 rounded p-2">
+                  <div className="text-blue-400 text-sm font-mono">DEMO MAP</div>
+                  <div className="text-slate-400 text-xs">Google Maps API not configured</div>
+                </div>
+              </div>
+            </div>
+            <p className="text-lg font-medium">Traffic Management Dashboard</p>
+            <p className="text-sm">Demo mode - Configure Google Maps API key for full functionality</p>
+          </div>
+        </div>
+        
+        {/* Demo incident markers */}
+        <div className="absolute top-4 left-4 space-y-2">
+          {mockIncidents.slice(0, 3).map((incident, index) => (
+            <div key={incident.id} className="bg-slate-800/80 backdrop-blur-sm rounded-lg p-3 border border-slate-600">
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${
+                  incident.severity === 'critical' ? 'bg-red-500' : 'bg-yellow-500'
+                }`}></div>
+                <span className="text-xs text-slate-300">{incident.title}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        {/* Demo controls */}
+        <div className="absolute bottom-4 right-4 bg-slate-800/80 backdrop-blur-sm rounded-lg p-2">
+          <div className="flex gap-2">
+            <button className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">
+              Zoom In
+            </button>
+            <button className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">
+              Zoom Out
+            </button>
+            <button className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">
+              Reset
+            </button>
+          </div>
         </div>
       </div>
     )

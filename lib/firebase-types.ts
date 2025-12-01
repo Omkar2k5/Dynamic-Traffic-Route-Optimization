@@ -1,51 +1,48 @@
-// Firebase Camera Data Types
-export interface CameraCoordinates {
-  latitude: number;
-  longitude: number;
-}
+// Firebase Types for ML Analysis Records
+// Defines the structure for ML analysis data stored in Firebase
 
-export interface TrafficStatus {
-  congestionLevel: "low" | "medium" | "high";
-  vehicleCount: number;
-  averageSpeed: number; // km/h
-  lastUpdated: number; // timestamp
-}
-
-export interface AccidentStatus {
-  isAccident: boolean;
-  severity?: "minor" | "major" | "critical";
-  description?: string;
-  reportedAt?: number; // timestamp
-  resolvedAt?: number; // timestamp
-}
-
-export interface CameraData {
-  cameraNumber: string;
-  coordinates: CameraCoordinates;
-  trafficStatus: TrafficStatus;
-  accidentStatus: AccidentStatus;
-  isActive: boolean;
-  name?: string;
-  location?: string;
-  createdAt: number; // timestamp
-  updatedAt: number; // timestamp
-}
-
-// Firebase database structure
-export interface FirebaseDatabase {
-  cameras: {
-    [cameraId: string]: CameraData;
+export interface MLAnalysisRecord {
+  id: string;
+  type: 'traffic' | 'accident' | 'dual';
+  cameraId: string;
+  result: any; // ML analysis result (traffic, accident, or dual analysis)
+  timestamp: number;
+  processingTime: number;
+  confidence: number;
+  imageHash: string;
+  metadata?: {
+    originalFilename?: string;
+    processedFilename?: string;
+    fileSize?: number;
+    modelVersion?: string;
+    analysisOptions?: any;
   };
 }
 
-// API Response types
-export interface CameraListResponse {
-  cameras: CameraData[];
-  total: number;
+export interface BatchUpdateResult {
+  success: boolean;
+  recordsProcessed: number;
+  errors?: string[];
+  timestamp: number;
 }
 
-export interface CameraUpdateRequest {
-  trafficStatus?: Partial<TrafficStatus>;
-  accidentStatus?: Partial<AccidentStatus>;
-  isActive?: boolean;
+export interface CameraStatus {
+  id: string;
+  isProcessing: boolean;
+  lastUpdate: number;
+  models?: {
+    trafficModel?: 'idle' | 'loading' | 'ready' | 'error';
+    accidentModel?: 'idle' | 'loading' | 'ready' | 'error';
+  };
+  error?: string;
+}
+
+export interface FirebaseConfig {
+  projectId: string;
+  apiKey: string;
+  authDomain: string;
+  databaseURL: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
 }
