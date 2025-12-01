@@ -4,6 +4,7 @@ import { StatsOverview } from "@/components/dashboard/stats-overview"
 import { IncidentsPanel } from "@/components/dashboard/incidents-panel"
 import { AlertsPanel } from "@/components/dashboard/alerts-panel"
 import { RealtimeMetrics } from "@/components/dashboard/realtime-metrics"
+import { LiveTrafficStatus } from "@/components/dashboard/live-traffic-status"
 
 export default function Home() {
   return (
@@ -16,6 +17,7 @@ export default function Home() {
 
         {/* Right sidebar */}
         <div className="flex flex-col gap-4 overflow-y-auto">
+          <LiveTrafficStatus />
           <StatsOverview />
           <RealtimeMetrics />
           <IncidentsPanel />

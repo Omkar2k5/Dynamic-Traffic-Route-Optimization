@@ -36,6 +36,31 @@ export interface CCTVLocation extends StaticCoordinates {
 
 // Pre-configured static camera locations with fixed coordinates
 export const STATIC_CAMERA_LOCATIONS: CCTVLocation[] = [
+  // Real ML Model Camera - Pune, India
+  {
+    id: "cctv1",
+    name: "Pune Traffic Monitor (ML Model)",
+    location: "Pune, Maharashtra, India",
+    latitude: 18.4807,
+    longitude: 73.8610,
+    address: "Pune, Maharashtra, India",
+    area: "Real-time ML Traffic Detection",
+    trafficData: {
+      congestionLevel: "MODERATE",
+      vehicleCount: 0,
+      averageSpeed: 0,
+      lastUpdated: Date.now()
+    },
+    accidentData: {
+      isAccident: false,
+      severity: null,
+      description: "Live ML traffic analysis active"
+    },
+    isActive: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  // Demo cameras for comparison
   {
     id: "CAM001",
     name: "Downtown Main Intersection",
@@ -181,10 +206,75 @@ export const STATIC_CAMERA_LOCATIONS: CCTVLocation[] = [
 
 class StaticDatabase {
   private cameras: CCTVLocation[] = [...STATIC_CAMERA_LOCATIONS];
+  private isSyncingWithMongoDB = false;
+  private lastMongoDBSync = 0;
+  private syncInterval = 30000; // 30 seconds
 
   // Get all cameras
   getAllCameras(): CCTVLocation[] {
     return this.cameras;
+  }
+
+  // Sync with MongoDB real-time data
+  async syncWithMongoDB(): Promise<void> {
+    if (this.isSyncingWithMongoDB) {
+      console.log('MongoDB sync already in progress, skipping...');
+      return;
+    }
+
+    const now = Date.now();
+    if (now - this.lastMongoDBSync < this.syncInterval) {
+      console.log('MongoDB sync throttled, last sync:', new Date(this.lastMongoDBSync).toLocaleTimeString());
+      return;
+    }
+
+    this.isSyncingWithMongoDB = true;
+    console.log('🔄 Starting MongoDB sync...');
+
+    try {
+      const response = await fetch('/api/traffic/realtime');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.data && result.data.length > 0) {
+        console.log(`📡 Received ${result.data.length} cameras from MongoDB`);
+        
+        // Update or add cameras from MongoDB
+        result.data.forEach((mongoCamera: any) => {
+          const existingIndex = this.cameras.findIndex(c => c.id === mongoCamera.id);
+          
+          if (existingIndex >= 0) {
+            // Update existing camera
+            this.cameras[existingIndex] = {
+              ...this.cameras[existingIndex],
+              trafficData: mongoCamera.trafficData,
+              accidentData: mongoCamera.accidentData,
+              updatedAt: Date.now()
+            };
+            console.log(`✅ Updated camera ${mongoCamera.id}: ${mongoCamera.trafficData.congestionLevel} (${mongoCamera.trafficData.vehicleCount} vehicles)`);
+          } else {
+            // Add new camera from MongoDB
+            this.cameras.push(mongoCamera);
+            console.log(`➕ Added new camera from MongoDB: ${mongoCamera.id}`);
+          }
+        });
+        
+        this.lastMongoDBSync = now;
+        console.log('✅ MongoDB sync completed successfully');
+      } else {
+        console.warn('⚠️ MongoDB response format unexpected:', result);
+      }
+      
+    } catch (error) {
+      console.error('❌ MongoDB sync failed:', error);
+      // Don't throw error, just log it - we continue with static data
+    } finally {
+      this.isSyncingWithMongoDB = false;
+    }
   }
 
   // Get camera by ID
@@ -249,21 +339,29 @@ class StaticDatabase {
     });
   }
 
-  // Simulate real-time updates
-  simulateRealTimeUpdate(): void {
+  // Simulate real-time updates for demo cameras only
+  simulateDemoUpdates(): void {
     this.cameras.forEach(camera => {
-      // Randomly update traffic data
-      const vehicleChange = Math.floor(Math.random() * 10) - 5; // -5 to +5
-      camera.trafficData.vehicleCount = Math.max(0, camera.trafficData.vehicleCount + vehicleChange);
-      
-      // Update speed based on vehicle count
-      const baseSpeed = 50;
-      const congestionMultiplier = this.getCongestionMultiplier(camera.trafficData.congestionLevel);
-      camera.trafficData.averageSpeed = Math.round(baseSpeed * congestionMultiplier);
-      
-      camera.trafficData.lastUpdated = Date.now();
-      camera.updatedAt = Date.now();
+      // Only update demo cameras, not ML model cameras
+      if (camera.id.startsWith('CAM') || camera.id.startsWith('DEMO')) {
+        // Randomly update traffic data
+        const vehicleChange = Math.floor(Math.random() * 10) - 5; // -5 to +5
+        camera.trafficData.vehicleCount = Math.max(0, camera.trafficData.vehicleCount + vehicleChange);
+        
+        // Update speed based on vehicle count
+        const baseSpeed = 50;
+        const congestionMultiplier = this.getCongestionMultiplier(camera.trafficData.congestionLevel);
+        camera.trafficData.averageSpeed = Math.round(baseSpeed * congestionMultiplier);
+        
+        camera.trafficData.lastUpdated = Date.now();
+        camera.updatedAt = Date.now();
+      }
     });
+  }
+
+  // Legacy method for backward compatibility
+  simulateRealTimeUpdate(): void {
+    this.simulateDemoUpdates();
   }
 
   private getCongestionMultiplier(congestionLevel: string): number {
@@ -335,7 +433,17 @@ class StaticDatabase {
 // Export singleton instance
 export const staticDatabase = new StaticDatabase();
 
-// Auto-update every 30 seconds to simulate real-time data
-setInterval(() => {
-  staticDatabase.simulateRealTimeUpdate();
+// Auto-sync with MongoDB every 30 seconds for real-time data
+setInterval(async () => {
+  console.log('🔄 Auto-syncing with MongoDB...');
+  await staticDatabase.syncWithMongoDB();
+  
+  // Only simulate updates for demo cameras (not ML model cameras)
+  staticDatabase.simulateDemoUpdates();
 }, 30000);
+
+// Initial sync on startup
+setTimeout(async () => {
+  console.log('🚀 Initial MongoDB sync on startup...');
+  await staticDatabase.syncWithMongoDB();
+}, 2000); // Wait 2 seconds for app to load

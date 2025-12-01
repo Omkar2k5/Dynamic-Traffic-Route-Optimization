@@ -561,6 +561,25 @@ export function GoogleMapContainer() {
         title += ` - Medium Traffic`
       }
       
+      // Special styling for ML model cameras
+      let markerIcon = {
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 8,
+        fillColor: color,
+        fillOpacity: 0.9,
+        strokeColor: "#ffffff",
+        strokeWeight: 2,
+      }
+      
+      // Add pulsing effect for real-time ML cameras
+      if (camera.id === "cctv1" || camera.name.includes("ML Model")) {
+        markerIcon = {
+          ...markerIcon,
+          strokeColor: "#0066ff", // Blue ring for ML cameras
+          strokeWeight: 3,
+        }
+      }
+      
       const marker = new window.google.maps.Marker({
         position: {
           lat: camera.latitude,
@@ -568,33 +587,33 @@ export function GoogleMapContainer() {
         },
         map: mapInstance,
         title,
-        icon: {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          scale: 8,
-          fillColor: color,
-          fillOpacity: 0.9,
-          strokeColor: "#ffffff",
-          strokeWeight: 2,
-        },
+        icon: markerIcon,
       })
 
       // Add info window for camera details
+      const lastUpdated = new Date(camera.trafficData.lastUpdated).toLocaleTimeString()
+      const isRealTime = camera.id === "cctv1" || camera.name.includes("ML Model")
+      const dataSource = isRealTime ? "🔴 LIVE ML DATA" : "📊 DEMO DATA"
+      
       const infoWindow = new window.google.maps.InfoWindow({
         content: `
           <div style="color: #333; font-family: system-ui;">
-            <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">
-              ${camera.name}
+            <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600; ${isRealTime ? 'color: #0066ff;' : ''}">
+              ${camera.name} ${isRealTime ? '🤖' : ''}
             </h3>
             <p style="margin: 0 0 4px 0; font-size: 12px; color: #666;">
               ${camera.location}
             </p>
             <div style="font-size: 11px; color: #888;">
+              <div style="margin-bottom: 4px;"><strong>${dataSource}</strong></div>
               <div>Traffic: ${camera.trafficData.congestionLevel} (${camera.trafficData.vehicleCount} vehicles)</div>
               <div>Speed: ${camera.trafficData.averageSpeed} km/h</div>
+              <div>Updated: ${lastUpdated}</div>
               ${camera.accidentData.isAccident ? 
                 `<div style="color: #ef4444; font-weight: 600;">⚠️ ACCIDENT DETECTED</div>` : 
                 '<div style="color: #22c55e;">✓ No incidents</div>'
               }
+              ${isRealTime ? '<div style="color: #0066ff; font-size: 10px; margin-top: 4px;">Real-time from ML model</div>' : ''}
             </div>
           </div>
         `
@@ -606,7 +625,7 @@ export function GoogleMapContainer() {
           lat: camera.latitude,
           lng: camera.longitude
         })
-        mapInstance.setZoom(16)
+        mapInstance.setZoom(isRealTime ? 16 : 15)
       })
 
       cameraMarkersRef.push(marker)
