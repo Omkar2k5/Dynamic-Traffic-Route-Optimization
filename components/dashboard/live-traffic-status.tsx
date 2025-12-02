@@ -12,23 +12,52 @@ export function LiveTrafficStatus() {
   const [isConnected, setIsConnected] = useState<boolean>(true)
 
   useEffect(() => {
-    // Find ML model camera
-    const findMlCamera = () => {
-      const cameras = staticDatabase.getAllCameras()
-      const mlCam = cameras.find(camera => 
-        camera.id === "cctv1" || 
-        camera.name.includes("ML Model") ||
-        camera.name.includes("Pune")
-      )
-      setMlCamera(mlCam || null)
-      setLastUpdate(new Date())
+    // Fetch live ML model camera data from MongoDB API
+    const fetchMlCamera = async () => {
+      try {
+        const response = await fetch('/api/traffic/realtime')
+        const result = await response.json()
+        
+        if (result.success && result.data && result.data.length > 0) {
+          // Find ML model camera from API data
+          const mlCam = result.data.find((camera: any) => 
+            camera.id === "cctv1" || 
+            camera.name === "cctv1" ||
+            camera.name.includes("CCTV") ||
+            camera.name.includes("ML Model") ||
+            camera.name.includes("Pune")
+          )
+
+          setMlCamera(mlCam || null)
+          setIsConnected(true)
+        } else {
+          console.warn('No ML camera data found in API response')
+          setIsConnected(false)
+        }
+        
+        setLastUpdate(new Date())
+      } catch (error) {
+        console.error('Failed to fetch live traffic data:', error)
+        setIsConnected(false)
+        
+        // Fallback to static database if API fails
+        const cameras = staticDatabase.getAllCameras()
+        const mlCam = cameras.find(camera => 
+          camera.id === "cctv1" || 
+          camera.name === "cctv1" ||
+          camera.name.includes("CCTV") ||
+          camera.name.includes("ML Model") ||
+          camera.name.includes("Pune")
+        )
+        setMlCamera(mlCam || null)
+      }
     }
 
     // Initial load
-    findMlCamera()
+    fetchMlCamera()
 
-    // Update every 5 seconds to show real-time changes
-    const interval = setInterval(findMlCamera, 5000)
+    // Update every 2 seconds to show real-time changes
+    const interval = setInterval(fetchMlCamera, 2000)
 
     return () => clearInterval(interval)
   }, [])
@@ -102,9 +131,9 @@ export function LiveTrafficStatus() {
         <div className="flex items-center justify-between">
           <span className="text-sm text-slate-300">Status:</span>
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${getStatusColor(mlCamera.trafficData.congestionLevel)} animate-pulse`}></div>
-            <span className={`text-sm font-medium ${getStatusTextColor(mlCamera.trafficData.congestionLevel)}`}>
-              {mlCamera.trafficData.congestionLevel.replace('_', ' ')}
+            <div className={`w-2 h-2 rounded-full ${getStatusColor(mlCamera.trafficData?.congestionLevel || 'MODERATE')} animate-pulse`}></div>
+            <span className={`text-sm font-medium ${getStatusTextColor(mlCamera.trafficData?.congestionLevel || 'MODERATE')}`}>
+              {(mlCamera.trafficData?.congestionLevel || 'MODERATE').replace('_', ' ')}
             </span>
           </div>
         </div>
@@ -115,18 +144,12 @@ export function LiveTrafficStatus() {
           <div className="flex items-center gap-1">
             <Car className="w-3 h-3 text-slate-400" />
             <span className="text-sm font-medium text-slate-200">
-              {mlCamera.trafficData.vehicleCount}
+              {mlCamera.trafficData?.vehicleCount || 0}
             </span>
           </div>
         </div>
 
-        {/* Average Speed */}
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-slate-300">Avg Speed:</span>
-          <span className="text-sm font-medium text-slate-200">
-            {mlCamera.trafficData.averageSpeed} km/h
-          </span>
-        </div>
+
 
         {/* Last Updated */}
         <div className="flex items-center justify-between pt-2 border-t border-slate-700">

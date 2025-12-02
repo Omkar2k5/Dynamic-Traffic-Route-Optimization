@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// MongoDB integration with fallback for development
-let MongoClient: any = null;
-try {
-  // Dynamic import to avoid build errors
-  const mongodb = require('mongodb');
-  MongoClient = mongodb.MongoClient;
-} catch (error) {
-  console.warn('MongoDB package not available, using fallback data');
-}
-
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
 const DATABASE_NAME = 'Traffic';
 const COLLECTION_NAME = 'cctv';
+
+// MongoDB integration with fallback for development
+let MongoClient: any = null;
 
 interface TrafficData {
   _id: string;
@@ -31,9 +24,16 @@ interface TrafficData {
 
 // GET - Fetch real-time traffic data from MongoDB
 export async function GET(request: NextRequest) {
-  // If MongoDB client is not available, return fallback data immediately
-  if (!MongoClient) {
+  // Runtime check for MongoDB availability
+  let MongoClientClass: any = null;
+  try {
+    // Try to import at runtime
+    const mongodb = require('mongodb');
+    MongoClientClass = mongodb.MongoClient;
+    console.log('✅ MongoDB package imported successfully');
+  } catch (error) {
     console.log('📊 Returning fallback traffic data (MongoDB package not installed)');
+    console.log('Error details:', error);
     return NextResponse.json({
       success: true,
       data: [{
@@ -61,12 +61,12 @@ export async function GET(request: NextRequest) {
       }],
       timestamp: new Date().toISOString(),
       count: 1,
-      note: "Fallback data - Install MongoDB package for live data"
+      note: "Fallback data - MongoDB package not available"
     });
   }
 
   try {
-    const client = new MongoClient(MONGODB_URI, {
+    const client = new MongoClientClass(MONGODB_URI, {
       serverSelectionTimeoutMS: 5000,
     });
 
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
                         data.traffic_status === 'TRAFFIC_JAM' ? 'TRAFFIC_JAM' : 'MODERATE',
         vehicleCount: data.vehicle_count || 0,
         averageSpeed: data.average_speed || 0,
-        lastUpdated: new Date(data.updated_at).getTime()
+        lastUpdated: data.updated_at // Keep as ISO string for better readability
       },
       accidentData: {
         isAccident: false, // ML model doesn't detect accidents, only traffic
@@ -102,8 +102,8 @@ export async function GET(request: NextRequest) {
         description: "Traffic monitoring active"
       },
       isActive: true,
-      createdAt: new Date(data.timestamp).getTime(),
-      updatedAt: new Date(data.updated_at).getTime()
+      createdAt: data.timestamp, // Keep as ISO string
+      updatedAt: data.updated_at // Keep as ISO string
     }));
 
     await client.close();
@@ -156,8 +156,13 @@ export async function GET(request: NextRequest) {
 
 // POST - Update traffic data (for manual updates)
 export async function POST(request: NextRequest) {
-  // If MongoDB client is not available, return error
-  if (!MongoClient) {
+  // Runtime check for MongoDB availability
+  let MongoClientClass: any = null;
+  try {
+    // Try to import at runtime
+    const mongodb = require('mongodb');
+    MongoClientClass = mongodb.MongoClient;
+  } catch (error) {
     return NextResponse.json(
       { error: 'MongoDB package not installed - cannot update traffic data' },
       { status: 503 }
@@ -175,7 +180,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const client = new MongoClient(MONGODB_URI, {
+    const client = new MongoClientClass(MONGODB_URI, {
       serverSelectionTimeoutMS: 5000,
     });
 

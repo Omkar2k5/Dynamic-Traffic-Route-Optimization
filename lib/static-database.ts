@@ -232,7 +232,30 @@ class StaticDatabase {
     console.log('🔄 Starting MongoDB sync...');
 
     try {
-      const response = await fetch('/api/traffic/realtime');
+      // Detect environment and use appropriate URL
+      let baseUrl = 'http://localhost:3001'; // Default fallback
+      
+      if (typeof window !== 'undefined') {
+        // Browser environment - use current origin
+        baseUrl = window.location.origin;
+      } else if (process.env.NEXT_PUBLIC_BASE_URL) {
+        // Server environment with env var
+        baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+      } else if (process.env.VERCEL_URL) {
+        // Vercel deployment
+        baseUrl = `https://${process.env.VERCEL_URL}`;
+      }
+      
+      console.log(`🔗 Attempting sync with URL: ${baseUrl}/api/traffic/realtime`);
+      
+      const response = await fetch(`${baseUrl}/api/traffic/realtime`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // Add timeout
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      });
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -271,6 +294,15 @@ class StaticDatabase {
       
     } catch (error) {
       console.error('❌ MongoDB sync failed:', error);
+      
+      // More specific error logging
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        console.error('🔌 Network error - check if server is running on port 3001');
+        console.error('🌐 Current location:', typeof window !== 'undefined' ? window.location.origin : 'server-side');
+      } else if (error instanceof Error) {
+        console.error('📝 Error details:', error.message);
+      }
+      
       // Don't throw error, just log it - we continue with static data
     } finally {
       this.isSyncingWithMongoDB = false;
@@ -433,17 +465,17 @@ class StaticDatabase {
 // Export singleton instance
 export const staticDatabase = new StaticDatabase();
 
-// Auto-sync with MongoDB every 30 seconds for real-time data
-setInterval(async () => {
-  console.log('🔄 Auto-syncing with MongoDB...');
-  await staticDatabase.syncWithMongoDB();
-  
-  // Only simulate updates for demo cameras (not ML model cameras)
-  staticDatabase.simulateDemoUpdates();
-}, 30000);
+// Auto-sync with MongoDB every 30 seconds for real-time data (disabled for now to prevent fetch errors)
+// setInterval(async () => {
+//   console.log('🔄 Auto-syncing with MongoDB...');
+//   await staticDatabase.syncWithMongoDB();
+//   
+//   // Only simulate updates for demo cameras (not ML model cameras)
+//   staticDatabase.simulateDemoUpdates();
+// }, 30000);
 
-// Initial sync on startup
-setTimeout(async () => {
-  console.log('🚀 Initial MongoDB sync on startup...');
-  await staticDatabase.syncWithMongoDB();
-}, 2000); // Wait 2 seconds for app to load
+// Initial sync on startup (disabled for now)
+// setTimeout(async () => {
+//   console.log('🚀 Initial MongoDB sync on startup...');
+//   await staticDatabase.syncWithMongoDB();
+// }, 2000); // Wait 2 seconds for app to load
